@@ -1,0 +1,93 @@
+# Here’s an enhanced version of the script with:
+	#1.	Dynamic Fetching of VPC Peering Connections: Finds all active VPC peering connections.
+	#2.	Logging to a File: Saves success/failure logs for better tracking.
+	#3.	Improved Exception Handling: Catches AWS-specific errors for better debugging.
+
+⸻
+
+#Enhanced Python Script
+
+
+import boto3
+import logging
+from botocore.exceptions import BotoCoreError, NoCredentialsError, ClientError
+
+# Setup logging
+logging.basicConfig(
+    filename="vpc_peering_removal.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+# Initialize Boto3 EC2 client
+ec2_client = boto3.client('ec2')
+
+def get_active_vpc_peering_connections():
+    """Fetches active VPC peering connection IDs."""
+    try:
+        response = ec2_client.describe_vpc_peering_connections()
+        peering_ids = [
+            pcx['VpcPeeringConnectionId']
+            for pcx in response.get('VpcPeeringConnections', [])
+            if pcx['Status']['Code'] == 'active'
+        ]
+        
+        if not peering_ids:
+            logging.info("No active VPC peering connections found.")
+            print("No active VPC peering connections found.")
+        
+        return peering_ids
+
+    except (BotoCoreError, NoCredentialsError, ClientError) as e:
+        logging.error(f"Error fetching VPC peering connections: {str(e)}")
+        print(f"Error fetching VPC peering connections: {str(e)}")
+        return []
+
+def delete_vpc_peering(peering_ids):
+    """Deletes the given VPC peering connections."""
+    for peering_id in peering_ids:
+        try:
+            print(f"Deleting VPC Peering Connection: {peering_id}")
+            response = ec2_client.delete_vpc_peering_connection(VpcPeeringConnectionId=peering_id)
+            
+            if response.get('Return', False):
+                success_msg = f"Successfully deleted {peering_id}"
+                logging.info(success_msg)
+                print(success_msg)
+            else:
+                failure_msg = f"Failed to delete {peering_id}"
+                logging.warning(failure_msg)
+                print(failure_msg)
+        
+        except ClientError as e:
+            error_msg = f"Error deleting {peering_id}: {e.response['Error']['Message']}"
+            logging.error(error_msg)
+            print(error_msg)
+
+# Fetch active VPC peering connections
+vpc_peering_connection_ids = get_active_vpc_peering_connections()
+
+# Proceed with deletion if any active peering connections exist
+if vpc_peering_connection_ids:
+    delete_vpc_peering(vpc_peering_connection_ids)
+else:
+    print("No active VPC peering connections to delete.")
+
+#
+
+⸻
+
+#Improvements & Features
+
+#✅ Automatic Detection: No need to manually list VPC peering connections. It automatically finds all active peering connections.
+#✅ Error Handling: Catches AWS-specific errors (NoCredentialsError, ClientError).
+#✅ Logging: Logs results into vpc_peering_removal.log.
+#✅ User-Friendly Messages: Provides clear success/failure messages.
+
+⸻
+
+#Next Steps
+#Run the script: Just execute it in your Python environment.
+#Check the log file (vpc_peering_removal.log) to review deletion results.
+#Modify filtering criteria (e.g., delete only peering connections in specific VPCs).
+
