@@ -1,0 +1,64 @@
+import boto3
+
+def list_vpc_peering_connections(region):
+    ec2 = boto3.client('ec2', region_name=region)
+    
+    response = ec2.describe_vpc_peering_connections()
+    
+    peering_ids = [peering['VpcPeeringConnectionId'] for peering in response.get('VpcPeeringConnections', [])]
+    
+    return peering_ids
+
+if __name__ == "__main__":
+    aws_region = "us-east-1"  # Change this to your target region
+    peering_connections = list_vpc_peering_connections(aws_region)
+    
+    if peering_connections:
+        print("VPC Peering Connection IDs:")
+        for pc_id in peering_connections:
+            print(pc_id)
+    else:
+        print("No VPC Peering Connections found in region:", aws_region)
+
+#enjanced version with multiple regions 
+
+import boto3
+
+def list_vpc_peering_connections(regions, status_filter=None):
+    """
+    Lists VPC Peering Connection IDs in specified AWS regions.
+    
+    :param regions: List of AWS regions to check.
+    :param status_filter: Optional status filter (e.g., 'active', 'pending-acceptance').
+    :return: Dictionary with region as key and list of peering connection IDs as values.
+    """
+    peering_connections = {}
+
+    for region in regions:
+        ec2 = boto3.client('ec2', region_name=region)
+        response = ec2.describe_vpc_peering_connections()
+
+        filtered_peering_ids = [
+            pc['VpcPeeringConnectionId']
+            for pc in response.get('VpcPeeringConnections', [])
+            if not status_filter or pc['Status']['Code'] == status_filter
+        ]
+
+        peering_connections[region] = filtered_peering_ids
+
+    return peering_connections
+
+if __name__ == "__main__":
+    aws_regions = ["us-east-1", "us-west-1", "us-west-2"]  # Add your regions here
+    status_filter = "active"  # Change this to None to fetch all peering connections
+
+    result = list_vpc_peering_connections(aws_regions, status_filter)
+
+    for region, peering_ids in result.items():
+        print(f"\nRegion: {region}")
+        if peering_ids:
+            print("VPC Peering Connection IDs:")
+            for pc_id in peering_ids:
+                print(pc_id)
+        else:
+            print("No matching VPC Peering Connections found.")
