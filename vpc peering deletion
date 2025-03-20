@@ -7,6 +7,8 @@
 
 #Enhanced Python Script
 
+#Prerequisites:
+#1.	Install boto3 if not already installed:
 
 import boto3
 import logging
