@@ -1,0 +1,209 @@
+#tgw-flow-logs-to-s3/
+
+#Module Structure
+#│── main.tf
+#│── variables.tf
+#│── outputs.tf
+#│── README.md
+
+#updated main.tf (Terraform Module)
+
+provider "aws" {
+  region = var.aws_region
+}
+
+# Create an S3 bucket for storing TGW flow logs
+resource "aws_s3_bucket" "tgw_flow_logs" {
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = var.s3_bucket_name
+
+  lifecycle {
+    prevent_destroy = false
+  }
+
+  tags = var.tags
+}
+
+# Enable S3 bucket versioning (optional)
+resource "aws_s3_bucket_versioning" "tgw_flow_logs" {
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = aws_s3_bucket.tgw_flow_logs[0].id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Enable S3 bucket encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "tgw_flow_logs" {
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = aws_s3_bucket.tgw_flow_logs[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# S3 Lifecycle Rule for Log Retention
+resource "aws_s3_bucket_lifecycle_configuration" "tgw_flow_logs" {
+  count  = var.create_s3_bucket && var.enable_log_retention ? 1 : 0
+  bucket = aws_s3_bucket.tgw_flow_logs[0].id
+
+  rule {
+    id     = "log-retention-rule"
+    status = "Enabled"
+
+    expiration {
+      days = var.log_retention_days
+    }
+  }
+}
+
+# S3 bucket policy to allow TGW Flow Logs to write logs
+resource "aws_s3_bucket_policy" "tgw_flow_logs" {
+  count  = var.create_s3_bucket ? 1 : 0
+  bucket = aws_s3_bucket.tgw_flow_logs[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action = "s3:PutObject"
+        Resource = "arn:aws:s3:::${aws_s3_bucket.tgw_flow_logs[0].id}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# IAM Role for TGW Flow Logs
+resource "aws_iam_role" "tgw_flow_logs_role" {
+  name = "TGWFlowLogsRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "vpc-flow-logs.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# IAM Policy for TGW Flow Logs
+resource "aws_iam_policy" "tgw_flow_logs_policy" {
+  name        = "TGWFlowLogsPolicy"
+  description = "Allows TGW flow logs to write to S3"
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = "arn:aws:s3:::${var.s3_bucket_name}/*"
+      }
+    ]
+  })
+}
+
+# Attach the policy to the IAM Role
+resource "aws_iam_role_policy_attachment" "tgw_flow_logs_attach" {
+  role       = aws_iam_role.tgw_flow_logs_role.name
+  policy_arn = aws_iam_policy.tgw_flow_logs_policy.arn
+}
+
+# Enable TGW Flow Logs
+resource "aws_ec2_transit_gateway_policy_table" "tgw_flow_logs" {
+  transit_gateway_id = var.transit_gateway_id
+}
+
+resource "aws_ec2_transit_gateway_flow_log" "tgw_flow_logs" {
+  transit_gateway_id = var.transit_gateway_id
+  log_destination    = "arn:aws:s3:::${var.s3_bucket_name}"
+  log_format        = "json"
+}
+
+#Updated variables.tf (New Input Variables)
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "transit_gateway_id" {
+  description = "Transit Gateway ID"
+  type        = string
+}
+
+variable "s3_bucket_name" {
+  description = "S3 bucket name for storing TGW flow logs"
+  type        = string
+}
+
+variable "create_s3_bucket" {
+  description = "Set to true to create a new S3 bucket, false to use an existing one"
+  type        = bool
+  default     = true
+}
+
+variable "enable_log_retention" {
+  description = "Enable log retention policy"
+  type        = bool
+  default     = true
+}
+
+variable "log_retention_days" {
+  description = "Number of days to retain TGW flow logs"
+  type        = number
+  default     = 90
+}
+
+variable "tags" {
+  description = "Tags to apply to created resources"
+  type        = map(string)
+  default     = {}
+}
+
+#Updated outputs.tf (Outputs)
+
+module "tgw_flow_logs" {
+  source             = "./tgw-flow-logs-to-s3"
+  aws_region         = "us-west-2"
+  transit_gateway_id = "tgw-12345678"
+  s3_bucket_name     = "my-tgw-flow-logs-bucket"
+  create_s3_bucket   = true
+  enable_log_retention = true
+  log_retention_days = 180  # Retain logs for 180 days
+  tags = {
+    Environment = "Production"
+    Owner       = "DevOps"
+  }
+}
+
+#
+
+⸻
+
+#Enhancements in This Version
+
+#✅ Log Retention Configurable: Users can set log retention days or disable it.
+#✅ S3 Lifecycle Policy Added: Automatically deletes logs after X days.
+#✅ Better Security & Compliance: Encrypts logs and enforces IAM roles.
+
