@@ -93,3 +93,28 @@ else:
 #Check the log file (vpc_peering_removal.log) to review deletion results.
 #Modify filtering criteria (e.g., delete only peering connections in specific VPCs).
 
+#insentation error fix
+import boto3
+
+def list_vpc_peering_connections(region):
+    ec2 = boto3.client("ec2", region_name=region)
+    response = ec2.describe_vpc_peering_connections()
+
+    peering_ids = []
+    for peering in response.get("VpcPeeringConnections", []):
+        peering_ids.append(peering["VpcPeeringConnectionId"])
+
+    return peering_ids
+
+if __name__ == "__main__":
+    aws_region = "us-east-1"  # Change this to your target region
+    peering_connections = list_vpc_peering_connections(aws_region)
+
+    if peering_connections:
+        print("VPC Peering Connection IDs:")
+        for pc_id in peering_connections:
+            print(pc_id)
+    else:
+        print("No VPC Peering Connections found in region:", aws_region)
+
+
