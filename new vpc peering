@@ -1,0 +1,165 @@
+#
+
+
+⸻
+
+🔴 Required Information Before Running the Scripts
+
+1️⃣ AWS Account Details
+	•	Replace \033[91m111122223333\033[0m and \033[91m444455556666\033[0m with your actual AWS account IDs.
+	•	Replace \033[91mMyVPCPeeringRole\033[0m with the IAM role name that has permissions to manage VPC peering.
+
+2️⃣ AWS Regions
+	•	Replace \033[91mus-east-1\033[0m, \033[91mus-west-2\033[0m, \033[91meu-central-1\033[0m with your required AWS regions.
+
+3️⃣ IAM Role Permissions
+
+The IAM role should have:
+{
+    "Effect": "Allow",
+    "Action": [
+        "sts:AssumeRole",
+        "ec2:DescribeVpcPeeringConnections",
+        "ec2:DeleteVpcPeeringConnection"
+    ],
+    "Resource": "*"
+}
+
+⸻
+
+1️⃣ Describe VPC Peering Connections Script
+import boto3
+
+# List of AWS accounts and their respective role names
+aws_accounts = [
+    {"account_id": "\033[94m1234\033[0m", "role_name": "\033[94mTerraform-Vault-AWSADMIN\033[0m"},  # 🔵 AWS Account ID & IAM Role Name
+    {"account_id": "\033[94m4321\033[0m", "role_name": "\033[94mTerraform-Vault-AWSADMIN\033[0m"},  # 🔵 AWS Account ID & IAM Role Name
+]
+
+# List of AWS regions
+regions = ["\033[94mus-east-1\033[0m", "\033[94mus-west-2\033[0m"]  # 🔵 AWS Regions
+
+def assume_role(account_id, role_name):
+    """Assumes an IAM role in the target AWS account and returns temporary credentials."""
+    sts_client = boto3.client("sts")
+    role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
+    
+    try:
+        response = sts_client.assume_role(RoleArn=role_arn, RoleSessionName="VPCPeeringSession")
+        return response["Credentials"]
+    except Exception as e:
+        print(f"Error assuming role for account {account_id}: {e}")
+        return None
+
+def describe_vpc_peering(credentials, region):
+    """Describes VPC peering connections in a specific region using assumed credentials."""
+    ec2_client = boto3.client(
+        "ec2",
+        region_name=region,
+        aws_access_key_id=credentials["AccessKeyId"],
+        aws_secret_access_key=credentials["SecretAccessKey"],
+        aws_session_token=credentials["SessionToken"],
+    )
+    
+    try:
+        response = ec2_client.describe_vpc_peering_connections()
+        return response["VpcPeeringConnections"]
+    except Exception as e:
+        print(f"Error describing VPC Peering in {region}: {e}")
+        return []
+
+def main():
+    for account in aws_accounts:
+        credentials = assume_role(account["account_id"], account["role_name"])
+        if credentials:
+            for region in regions:
+                peerings = describe_vpc_peering(credentials, region)
+                print(f"\nAccount: {account['account_id']}, Region: {region}")
+                if peerings:
+                    for peering in peerings:
+                        print(f"  Peering ID: {peering['VpcPeeringConnectionId']}, Status: {peering['Status']['Code']}")
+                else:
+                    print("  No VPC Peering Connections found.")
+
+if __name__ == "__main__":
+    main()
+
+
+
+⸻
+
+2️⃣ Delete VPC Peering Connections Script
+import boto3
+
+# List of AWS accounts and their respective role names
+aws_accounts = [
+    {"account_id": "\033[94m1234\033[0m", "role_name": "\033[94mTerraform-Vault-AWSADMIN\033[0m"},  # 🔵 AWS Account ID & IAM Role Name
+    {"account_id": "\033[94m4321\033[0m", "role_name": "\033[94mTerraform-Vault-AWSADMIN\033[0m"},  # 🔵 AWS Account ID & IAM Role Name
+]
+
+# List of AWS regions
+regions = ["\033[94mus-east-1\033[0m", "\033[94mus-west-2\033[0m"]  # 🔵 AWS Regions
+
+def assume_role(account_id, role_name):
+    """Assumes an IAM role in the target AWS account and returns temporary credentials."""
+    sts_client = boto3.client("sts")
+    role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
+    
+    try:
+        response = sts_client.assume_role(RoleArn=role_arn, RoleSessionName="VPCPeeringSession")
+        return response["Credentials"]
+    except Exception as e:
+        print(f"Error assuming role for account {account_id}: {e}")
+        return None
+
+def delete_vpc_peering(credentials, region):
+    """Deletes all VPC peering connections in a specific region using assumed credentials."""
+    ec2_client = boto3.client(
+        "ec2",
+        region_name=region,
+        aws_access_key_id=credentials["AccessKeyId"],
+        aws_secret_access_key=credentials["SecretAccessKey"],
+        aws_session_token=credentials["SessionToken"],
+    )
+
+    try:
+        peerings = ec2_client.describe_vpc_peering_connections()["VpcPeeringConnections"]
+        if not peerings:
+            print(f"  No VPC Peering Connections found in {region}")
+            return
+        
+        for peering in peerings:
+            peering_id = peering["VpcPeeringConnectionId"]
+            print(f"  Deleting VPC Peering Connection: {peering_id}")
+            ec2_client.delete_vpc_peering_connection(VpcPeeringConnectionId=peering_id)
+            print(f"  Successfully deleted {peering_id}")
+    
+    except Exception as e:
+        print(f"Error deleting VPC Peering in {region}: {e}")
+
+def main():
+    for account in aws_accounts:
+        credentials = assume_role(account["account_id"], account["role_name"])
+        if credentials:
+            for region in regions:
+                print(f"\nAccount: {account['account_id']}, Region: {region}")
+                delete_vpc_peering(credentials, region)
+
+if __name__ == "__main__":
+    main()
+
+
+⸻
+
+Summary
+	•	All required details have been plugged in and highlighted in blue (\033[94m...\033[0m).
+	•	IAM Role Used: Terraform-Vault-AWSADMIN
+	•	AWS Accounts: 1234 and 4321
+	•	AWS Regions: us-east-1 and us-west-2
+
+This script is now ready to describe and delete VPC peering connections for your AWS accounts and regions. Let me know if you need any modifications!
+
+
+
+
+
