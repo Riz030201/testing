@@ -261,5 +261,75 @@ Unassociated Route Tables in eu-west-1: ['rtb-0xyz98765t6ef1234']
 Do you want to delete these route tables in eu-west-1? (yes/no): no
 Skipping deletion.
 
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
+# AWS Accounts and IAM role ARN to assume in each account
+AWS_ACCOUNTS = {
+    "\033[91m111122223333\033[0m": "\033[91marn:aws:iam::111122223333:role/CrossAccountDescribeRole\033[0m",  # 🔺 Replace with actual AWS Account ID & IAM Role
+    "\033[91m444455556666\033[0m": "\033[91marn:aws:iam::444455556666:role/CrossAccountDescribeRole\033[0m"   # 🔺 Replace accordingly
+}
+
+# AWS Regions to scan
+REGIONS = ["us-east-1", "us-west-2"]  # Replace with required AWS regions
+
+def assume_role(account_id, role_arn):
+    """Assumes an IAM role in the target AWS account and returns a temporary session."""
+    sts_client = boto3.client("sts")
+    try:
+        assumed_role = sts_client.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName="AssumeRoleSession"
+        )
+
+        credentials = assumed_role["Credentials"]
+
+        return boto3.Session(
+            aws_access_key_id=credentials["AccessKeyId"],
+            aws_secret_access_key=credentials["SecretAccessKey"],
+            aws_session_token=credentials["SessionToken"]
+        )
+    except Exception as e:
+        print(f"❌ Error assuming role for account {account_id}: {str(e)}")
+        return None
+
+def get_unassociated_route_tables(session, region):
+    """Finds unassociated route tables in the given AWS region."""
+    ec2_client = session.client("ec2", region_name=region)
+    try:
+        response = ec2_client.describe_route_tables()
+        unassociated_tables = []
+
+        for rt in response["RouteTables"]:
+            # Check if there are any associations
+            if "Associations" in rt and not any(assoc.get("Main", False) for assoc in rt["Associations"]):
+                if not rt["Associations"]:  # If Associations list is empty
+                    unassociated_tables.append(rt["RouteTableId"])
+        
+        return unassociated_tables
+    except Exception as e:
+        print(f"Error retrieving route tables in region {region}: {str(e)}")
+        return []
+
+def main():
+    """Finds unassociated route tables across multiple AWS accounts and regions using IAM role assumption."""
+    for account_id, role_arn in AWS_ACCOUNTS.items():
+        print(f"\n🔎 Checking AWS Account: \033[91m{account_id}\033[0m")
+
+        # Assume role for the target account
+        session = assume_role(account_id, role_arn)
+        if not session:
+            continue  # Skip if role assumption failed
+
+        for region in REGIONS:
+            print(f"\n➡️ Scanning region: {region}")
+            unassociated_tables = get_unassociated_route_tables(session, region)
+
+            if unassociated_tables:
+                print(f"Unassociated Route Tables in {region}: {unassociated_tables}")
+            else:
+                print(f"No unassociated route tables found in {region}.")
+
+if __name__ == "__main__":
+    main()
 
