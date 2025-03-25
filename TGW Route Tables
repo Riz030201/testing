@@ -1,0 +1,265 @@
+
+
+Example Script with Dummy Data
+
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+
+# List of AWS account profiles (from ~/.aws/credentials or assumed roles)
+AWS_ACCOUNTS = ["\033[94maccount1\033[0m", "\033[94maccount2\033[0m"]  # 🔹 Replace with actual AWS profile names
+
+# List of AWS regions to scan
+REGIONS = ["\033[94mus-east-1\033[0m", "\033[94mus-west-2\033[0m"]  # 🔹 Replace with actual AWS regions
+
+def get_unassociated_route_tables(session, region):
+    """Finds unassociated route tables in the given AWS region."""
+    ec2_client = session.client("ec2", region_name=region)
+    try:
+        response = ec2_client.describe_route_tables()
+        unassociated_tables = []
+
+        for rt in response["RouteTables"]:
+            # Check if there are any associations
+            if "Associations" in rt and not any(assoc.get("Main", False) for assoc in rt["Associations"]):
+                if not rt["Associations"]:  # If Associations list is empty
+                    unassociated_tables.append(rt["RouteTableId"])
+        
+        return unassociated_tables
+    except Exception as e:
+        print(f"Error retrieving route tables in region {region}: {str(e)}")
+        return []
+
+def delete_route_table(session, region, route_table_id):
+    """Deletes a specified route table."""
+    ec2_client = session.client("ec2", region_name=region)
+    try:
+        ec2_client.delete_route_table(RouteTableId=route_table_id)
+        print(f"✅ Successfully deleted route table: {route_table_id} in {region}")
+    except Exception as e:
+        print(f"❌ Failed to delete {route_table_id} in {region}: {str(e)}")
+
+def main():
+    """Finds and deletes unassociated route tables across multiple AWS accounts and regions."""
+    for account in AWS_ACCOUNTS:
+        print(f"\n🔎 Checking AWS Account: \033[94m{account}\033[0m")
+        
+        try:
+            session = boto3.Session(profile_name=account)
+            for region in REGIONS:
+                print(f"\n➡️ Scanning region: \033[94m{region}\033[0m")
+                unassociated_tables = get_unassociated_route_tables(session, region)
+
+                if unassociated_tables:
+                    print(f"Unassociated Route Tables in {region}: \033[94m{unassociated_tables}\033[0m")
+
+                    # Ask user confirmation before deletion
+                    confirm = input(f"Do you want to delete these route tables in {region}? (yes/no): ").strip().lower()
+                    if confirm == "yes":
+                        for rtb_id in unassociated_tables:
+                            delete_route_table(session, region, rtb_id)
+                    else:
+                        print("Skipping deletion.")
+                else:
+                    print(f"No unassociated route tables found in {region}.")
+        except (NoCredentialsError, PartialCredentialsError) as e:
+            print(f"❌ Credential error for account {account}: {str(e)}")
+        except Exception as e:
+            print(f"❌ Error with account {account}: {str(e)}")
+
+if __name__ == "__main__":
+    main()
+
+Field
+Highlighted Value (Blue)
+Dummy Data Example
+AWS Account Profiles
+"\033[94maccount1\033[0m"
+["dev-account", "prod-account"]
+AWS Regions
+"\033[94mus-east-1\033[0m"
+["us-east-1", "us-west-2"]
+Unassociated Route Tables Output
+"\033[94m{unassociated_tables}\033[0m"
+["rtb-0123456789abcdef0"]
+
+
+	•	Configure your AWS profiles in ~/.aws/credentials (or use an assumed role if working with multiple accounts).
+	•	Ensure that the necessary permissions (ec2:DescribeRouteTables) are granted to your credentials.
+
+⸻
+
+Script: Find Unassociated Route Tables
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+
+# List of AWS account profiles (from ~/.aws/credentials or assumed roles)
+AWS_ACCOUNTS = ["account1", "account2", "account3"]  # Replace with your AWS profiles
+REGIONS = ["us-east-1", "us-west-2", "eu-west-1"]  # Specify your AWS regions
+
+def get_unassociated_route_tables(session, region):
+    """Finds unassociated route tables in the given AWS region."""
+    ec2_client = session.client("ec2", region_name=region)
+    try:
+        response = ec2_client.describe_route_tables()
+        unassociated_tables = []
+
+        for rt in response["RouteTables"]:
+            # Check if there are any associations
+            if "Associations" in rt and not any(assoc.get("Main", False) for assoc in rt["Associations"]):
+                if not rt["Associations"]:  # If Associations list is empty
+                    unassociated_tables.append(rt["RouteTableId"])
+        
+        return unassociated_tables
+    except Exception as e:
+        print(f"Error in region {region}: {str(e)}")
+        return []
+
+def main():
+    """Iterates over multiple accounts and regions to find unassociated route tables."""
+    for account in AWS_ACCOUNTS:
+        print(f"\nChecking AWS Account: {account}")
+        
+        try:
+            session = boto3.Session(profile_name=account)
+            for region in REGIONS:
+                print(f"Scanning region: {region}")
+                unassociated_tables = get_unassociated_route_tables(session, region)
+
+                if unassociated_tables:
+                    print(f"Unassociated Route Tables in {region}: {unassociated_tables}")
+                else:
+                    print(f"No unassociated route tables found in {region}.")
+        except (NoCredentialsError, PartialCredentialsError) as e:
+            print(f"Credential error for account {account}: {str(e)}")
+        except Exception as e:
+            print(f"Error with account {account}: {str(e)}")
+
+if __name__ == "__main__":
+    main()
+
+⸻
+Example Output
+How It Works
+	1.	Loops through multiple AWS accounts: Uses boto3.Session(profile_name=account) to access each account.
+	2.	Iterates over specified AWS regions: Checks for unassociated route tables in each region.
+	3.	Filters route tables without associations: Excludes main route tables and considers only explicitly unassociated ones.
+	4.	Prints results per region: Displays unassociated route tables found in each account and region.
+
+
+Checking AWS Account: account1
+Scanning region: us-east-1
+Unassociated Route Tables in us-east-1: ['rtb-0abc12345d6ef7890']
+Scanning region: us-west-2
+No unassociated route tables found in us-west-2.
+
+Checking AWS Account: account2
+Scanning region: eu-west-1
+Unassociated Route Tables in eu-west-1: ['rtb-0xyz98765t6ef1234']
+
+
+⸻
+
+Script: Find & Delete Unassociated Route Tables
+
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+
+# List of AWS account profiles (from ~/.aws/credentials or assumed roles)
+AWS_ACCOUNTS = ["account1", "account2", "account3"]  # Replace with your AWS profiles
+REGIONS = ["us-east-1", "us-west-2", "eu-west-1"]  # Specify your AWS regions
+
+def get_unassociated_route_tables(session, region):
+    """Finds unassociated route tables in the given AWS region."""
+    ec2_client = session.client("ec2", region_name=region)
+    try:
+        response = ec2_client.describe_route_tables()
+        unassociated_tables = []
+
+        for rt in response["RouteTables"]:
+            # Check if there are any associations
+            if "Associations" in rt and not any(assoc.get("Main", False) for assoc in rt["Associations"]):
+                if not rt["Associations"]:  # If Associations list is empty
+                    unassociated_tables.append(rt["RouteTableId"])
+        
+        return unassociated_tables
+    except Exception as e:
+        print(f"Error retrieving route tables in region {region}: {str(e)}")
+        return []
+
+def delete_route_table(session, region, route_table_id):
+    """Deletes a specified route table."""
+    ec2_client = session.client("ec2", region_name=region)
+    try:
+        ec2_client.delete_route_table(RouteTableId=route_table_id)
+        print(f"✅ Successfully deleted route table: {route_table_id} in {region}")
+    except Exception as e:
+        print(f"❌ Failed to delete {route_table_id} in {region}: {str(e)}")
+
+def main():
+    """Finds and deletes unassociated route tables across multiple AWS accounts and regions."""
+    for account in AWS_ACCOUNTS:
+        print(f"\n🔎 Checking AWS Account: {account}")
+        
+        try:
+            session = boto3.Session(profile_name=account)
+            for region in REGIONS:
+                print(f"\n➡️ Scanning region: {region}")
+                unassociated_tables = get_unassociated_route_tables(session, region)
+
+                if unassociated_tables:
+                    print(f"Unassociated Route Tables in {region}: {unassociated_tables}")
+
+                    # Ask user confirmation before deletion
+                    confirm = input(f"Do you want to delete these route tables in {region}? (yes/no): ").strip().lower()
+                    if confirm == "yes":
+                        for rtb_id in unassociated_tables:
+                            delete_route_table(session, region, rtb_id)
+                    else:
+                        print("Skipping deletion.")
+                else:
+                    print(f"No unassociated route tables found in {region}.")
+        except (NoCredentialsError, PartialCredentialsError) as e:
+            print(f"❌ Credential error for account {account}: {str(e)}")
+        except Exception as e:
+            print(f"❌ Error with account {account}: {str(e)}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+⸻
+
+How It Works
+	1.	Finds unassociated route tables:
+	•	Calls describe_route_tables(), filtering out main or associated tables.
+	2.	Asks for confirmation before deleting:
+	•	Prevents accidental deletions by prompting the user.
+	3.	Deletes the route tables:
+	•	Calls delete_route_table(RouteTableId=rtb_id).
+	4.	Handles multiple AWS accounts and regions:
+	•	Uses AWS profiles (boto3.Session(profile_name=account)).
+
+⸻
+
+Example Output
+
+🔎 Checking AWS Account: account1
+
+➡️ Scanning region: us-east-1
+Unassociated Route Tables in us-east-1: ['rtb-0abc12345d6ef7890']
+Do you want to delete these route tables in us-east-1? (yes/no): yes
+✅ Successfully deleted route table: rtb-0abc12345d6ef7890 in us-east-1
+
+➡️ Scanning region: us-west-2
+No unassociated route tables found in us-west-2.
+
+🔎 Checking AWS Account: account2
+
+➡️ Scanning region: eu-west-1
+Unassociated Route Tables in eu-west-1: ['rtb-0xyz98765t6ef1234']
+Do you want to delete these route tables in eu-west-1? (yes/no): no
+Skipping deletion.
+
+
+
