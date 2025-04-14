@@ -1,4 +1,4 @@
-# This script lists VPCs attached to a specific Transit Gateway Route Table across specific regions using an STS role.
+# This script lists only valid VPCs attached to a specific Transit Gateway Route Table across specific regions using an STS role.
 
 import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
@@ -22,8 +22,8 @@ def assume_role(role_arn):
         print(f"Error assuming role: {e}")
         return None
 
-def list_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_id):
-    """List VPCs attached to a specific Transit Gateway Route Table across specified regions."""
+def list_valid_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_id):
+    """List only valid VPCs attached to a specific Transit Gateway Route Table across specified regions."""
     session = boto3.Session(
         aws_access_key_id=credentials['AccessKeyId'],
         aws_secret_access_key=credentials['SecretAccessKey'],
@@ -31,7 +31,6 @@ def list_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_
     )
 
     vpcs_by_region = {}
-    invalid_vpcs = []  # To store invalid VPC IDs
 
     for region in regions:
         print(f"Checking region: {region}")
@@ -63,8 +62,7 @@ def list_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_
                                 vpcs.append({'VpcId': vpc_id, 'CidrBlock': cidr_block, 'Name': vpc_name})
                         except ClientError as e:
                             if e.response['Error']['Code'] == 'InvalidVpcID.NotFound':
-                                print(f"Invalid VPC ID detected: {vpc_id} in region {region}")
-                                invalid_vpcs.append({'VpcId': vpc_id, 'Region': region})
+                                print(f"Skipping invalid VPC ID: {vpc_id} in region {region}")
                             else:
                                 print(f"Error fetching details for VPC {vpc_id} in region {region}: {e}")
 
@@ -73,7 +71,7 @@ def list_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_
             print(f"Error in region {region}: {e}")
             vpcs_by_region[region] = []
 
-    return vpcs_by_region, invalid_vpcs
+    return vpcs_by_region
 
 if __name__ == "__main__":
     # Assume the role
@@ -85,8 +83,8 @@ if __name__ == "__main__":
     # Use only the specified regions
     regions = REGIONS
 
-    # List VPCs attached to the specified Transit Gateway Route Table across specified regions
-    vpcs_by_region, invalid_vpcs = list_vpcs_attached_to_tgw_route_table(credentials, regions, TRANSIT_GATEWAY_ROUTE_TABLE_ID)
+    # List valid VPCs attached to the specified Transit Gateway Route Table across specified regions
+    vpcs_by_region = list_valid_vpcs_attached_to_tgw_route_table(credentials, regions, TRANSIT_GATEWAY_ROUTE_TABLE_ID)
 
     # Print the results
     print("\nValid VPCs attached to the Transit Gateway Route Table:")
@@ -97,11 +95,3 @@ if __name__ == "__main__":
                 print(f"  VPC ID: {vpc['VpcId']}, CIDR: {vpc['CidrBlock']}, Name: {vpc['Name']}")
         else:
             print(f"\nRegion {region} has no VPCs attached to the Transit Gateway Route Table.")
-
-    # Print invalid VPCs
-    if invalid_vpcs:
-        print("\nThe following VPCs are invalid (do not exist anymore):")
-        for invalid_vpc in invalid_vpcs:
-            print(f"  VPC ID: {invalid_vpc['VpcId']} in Region: {invalid_vpc['Region']}")
-    else:
-        print("\nNo invalid VPCs detected.")
