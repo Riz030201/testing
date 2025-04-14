@@ -89,9 +89,10 @@ if __name__ == "__main__":
     vpcs_by_region, invalid_vpcs = list_vpcs_attached_to_tgw_route_table(credentials, regions, TRANSIT_GATEWAY_ROUTE_TABLE_ID)
 
     # Print the results
+    print("\nValid VPCs attached to the Transit Gateway Route Table:")
     for region, vpcs in vpcs_by_region.items():
         if vpcs:
-            print(f"\nRegion {region} has the following VPCs attached to the Transit Gateway Route Table:")
+            print(f"\nRegion {region}:")
             for vpc in vpcs:
                 print(f"  VPC ID: {vpc['VpcId']}, CIDR: {vpc['CidrBlock']}, Name: {vpc['Name']}")
         else:
