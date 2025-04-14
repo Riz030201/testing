@@ -1,7 +1,7 @@
 # This script lists VPCs attached to a specific Transit Gateway Route Table across specific regions using an STS role.
 
 import boto3
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 
 ROLE_ARN = "arn:aws:iam::994653047345:role/rizwan-sts-role"
 TRANSIT_GATEWAY_ROUTE_TABLE_ID = "tgw-rtb-003ce805f119b7ee5"  # Replace with your Transit Gateway Route Table ID
@@ -31,6 +31,7 @@ def list_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_
     )
 
     vpcs_by_region = {}
+    invalid_vpcs = []  # To store invalid VPC IDs
 
     for region in regions:
         print(f"Checking region: {region}")
@@ -49,23 +50,30 @@ def list_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_
                     if attachment['ResourceType'] == 'vpc':
                         vpc_id = attachment['ResourceId']
 
-                        # Fetch VPC details
-                        vpc_details = ec2_client.describe_vpcs(VpcIds=[vpc_id])
-                        for vpc in vpc_details['Vpcs']:
-                            cidr_block = vpc['CidrBlock']
-                            # Get the VPC name from tags if available
-                            vpc_name = next(
-                                (tag['Value'] for tag in vpc.get('Tags', []) if tag['Key'] == 'Name'),
-                                'N/A'
-                            )
-                            vpcs.append({'VpcId': vpc_id, 'CidrBlock': cidr_block, 'Name': vpc_name})
+                        try:
+                            # Fetch VPC details
+                            vpc_details = ec2_client.describe_vpcs(VpcIds=[vpc_id])
+                            for vpc in vpc_details['Vpcs']:
+                                cidr_block = vpc['CidrBlock']
+                                # Get the VPC name from tags if available
+                                vpc_name = next(
+                                    (tag['Value'] for tag in vpc.get('Tags', []) if tag['Key'] == 'Name'),
+                                    'N/A'
+                                )
+                                vpcs.append({'VpcId': vpc_id, 'CidrBlock': cidr_block, 'Name': vpc_name})
+                        except ClientError as e:
+                            if e.response['Error']['Code'] == 'InvalidVpcID.NotFound':
+                                print(f"Invalid VPC ID detected: {vpc_id} in region {region}")
+                                invalid_vpcs.append({'VpcId': vpc_id, 'Region': region})
+                            else:
+                                print(f"Error fetching details for VPC {vpc_id} in region {region}: {e}")
 
             vpcs_by_region[region] = vpcs
         except Exception as e:
             print(f"Error in region {region}: {e}")
             vpcs_by_region[region] = []
 
-    return vpcs_by_region
+    return vpcs_by_region, invalid_vpcs
 
 if __name__ == "__main__":
     # Assume the role
@@ -78,7 +86,7 @@ if __name__ == "__main__":
     regions = REGIONS
 
     # List VPCs attached to the specified Transit Gateway Route Table across specified regions
-    vpcs_by_region = list_vpcs_attached_to_tgw_route_table(credentials, regions, TRANSIT_GATEWAY_ROUTE_TABLE_ID)
+    vpcs_by_region, invalid_vpcs = list_vpcs_attached_to_tgw_route_table(credentials, regions, TRANSIT_GATEWAY_ROUTE_TABLE_ID)
 
     # Print the results
     for region, vpcs in vpcs_by_region.items():
@@ -88,3 +96,11 @@ if __name__ == "__main__":
                 print(f"  VPC ID: {vpc['VpcId']}, CIDR: {vpc['CidrBlock']}, Name: {vpc['Name']}")
         else:
             print(f"\nRegion {region} has no VPCs attached to the Transit Gateway Route Table.")
+
+    # Print invalid VPCs
+    if invalid_vpcs:
+        print("\nThe following VPCs are invalid (do not exist anymore):")
+        for invalid_vpc in invalid_vpcs:
+            print(f"  VPC ID: {invalid_vpc['VpcId']} in Region: {invalid_vpc['Region']}")
+    else:
+        print("\nNo invalid VPCs detected.")
