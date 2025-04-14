@@ -47,7 +47,18 @@ def list_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_
             for route in tgw_associations['Routes']:
                 for attachment in route.get('TransitGatewayAttachments', []):
                     if attachment['ResourceType'] == 'vpc':
-                        vpcs.append(attachment['ResourceId'])
+                        vpc_id = attachment['ResourceId']
+
+                        # Fetch VPC details
+                        vpc_details = ec2_client.describe_vpcs(VpcIds=[vpc_id])
+                        for vpc in vpc_details['Vpcs']:
+                            cidr_block = vpc['CidrBlock']
+                            # Get the VPC name from tags if available
+                            vpc_name = next(
+                                (tag['Value'] for tag in vpc.get('Tags', []) if tag['Key'] == 'Name'),
+                                'N/A'
+                            )
+                            vpcs.append({'VpcId': vpc_id, 'CidrBlock': cidr_block, 'Name': vpc_name})
 
             vpcs_by_region[region] = vpcs
         except Exception as e:
@@ -72,6 +83,8 @@ if __name__ == "__main__":
     # Print the results
     for region, vpcs in vpcs_by_region.items():
         if vpcs:
-            print(f"Region {region} has the following VPCs attached to the Transit Gateway Route Table: {vpcs}")
+            print(f"\nRegion {region} has the following VPCs attached to the Transit Gateway Route Table:")
+            for vpc in vpcs:
+                print(f"  VPC ID: {vpc['VpcId']}, CIDR: {vpc['CidrBlock']}, Name: {vpc['Name']}")
         else:
-            print(f"Region {region} has no VPCs attached to the Transit Gateway Route Table.")
+            print(f"\nRegion {region} has no VPCs attached to the Transit Gateway Route Table.")
