@@ -1,13 +1,11 @@
-import boto3
-from botocore.exceptions import ClientError
+# This script lists VPCs attached to a specific Transit Gateway Route Table across specific regions using an STS role.
 
-# Define the STS role and regions
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+
 ROLE_ARN = "arn:aws:iam::994653047345:role/rizwan-sts-role"
-TRANSIT_GATEWAY_ATTACHMENT_IDS = [  # List of Transit Gateway Attachment IDs
-    "tgw-attach-0123456789abcdef0",
-    "tgw-attach-0abcdef1234567890"  # Add more TGW Attachment IDs as needed
-]
-REGIONS = ["us-east-1", "us-west-2", "ap-south-1"]  # Regions to query
+TRANSIT_GATEWAY_ROUTE_TABLE_ID = "tgw-rtb-003ce805f119b7ee5"  # Replace with your Transit Gateway Route Table ID
+REGIONS = ["us-east-1", "us-west-2", "ap-south-1"]  # Restrict to these regions
 
 def assume_role(role_arn):
     """Assume the specified role and return temporary credentials."""
@@ -15,69 +13,62 @@ def assume_role(role_arn):
         sts_client = boto3.client('sts')
         response = sts_client.assume_role(
             RoleArn=role_arn,
-            RoleSessionName="TransitGatewayAttachmentInspectionSession"
+            RoleSessionName="TransitGatewayRouteTableInspectionSession"
         )
         credentials = response['Credentials']
         print("Successfully assumed the role.")
-        return {
-            'aws_access_key_id': credentials['AccessKeyId'],
-            'aws_secret_access_key': credentials['SecretAccessKey'],
-            'aws_session_token': credentials['SessionToken']
-        }
-    except ClientError as e:
+        return credentials
+    except Exception as e:
         print(f"Error assuming role: {e}")
         return None
 
-def list_vpcs_by_tgw_attachment(credentials, regions, tgw_attachment_ids):
-    """List VPC CIDRs and Transit Gateway Attachment IDs associated with Transit Gateway Attachments."""
+def list_vpcs_attached_to_tgw_route_table(credentials, regions, tgw_route_table_id):
+    """List VPCs attached to a specific Transit Gateway Route Table across specified regions."""
     session = boto3.Session(
-        aws_access_key_id=credentials['aws_access_key_id'],
-        aws_secret_access_key=credentials['aws_secret_access_key'],
-        aws_session_token=credentials['aws_session_token']
+        aws_access_key_id=credentials['AccessKeyId'],
+        aws_secret_access_key=credentials['SecretAccessKey'],
+        aws_session_token=credentials['SessionToken']
     )
 
-    vpcs_by_attachment = {}
+    vpcs_by_region = {}
 
     for region in regions:
-        print(f"\nChecking region: {region}")
+        print(f"Checking region: {region}")
         ec2_client = session.client('ec2', region_name=region)
 
-        for attachment_id in tgw_attachment_ids:
-            print(f"  Processing Transit Gateway Attachment: {attachment_id}")
+        try:
+            # Describe Transit Gateway Route Table Associations
+            tgw_associations = ec2_client.search_transit_gateway_routes(
+                TransitGatewayRouteTableId=tgw_route_table_id,
+                Filters=[{'Name': 'attachment.resource-type', 'Values': ['vpc']}]
+            )
 
-            try:
-                # Describe the Transit Gateway Attachment
-                tgw_attachment = ec2_client.describe_transit_gateway_attachments(
-                    TransitGatewayAttachmentIds=[attachment_id]
-                )
-
-                vpcs = []
-                for attachment in tgw_attachment['TransitGatewayAttachments']:
+            vpcs = []
+            for route in tgw_associations['Routes']:
+                for attachment in route.get('TransitGatewayAttachments', []):
                     if attachment['ResourceType'] == 'vpc':
                         vpc_id = attachment['ResourceId']
 
+                        # Fetch VPC details
                         try:
-                            # Fetch VPC details
                             vpc_details = ec2_client.describe_vpcs(VpcIds=[vpc_id])
                             for vpc in vpc_details['Vpcs']:
                                 cidr_block = vpc['CidrBlock']
-                                vpcs.append({
-                                    'CidrBlock': cidr_block,
-                                    'VpcId': vpc_id,
-                                    'AttachmentId': attachment_id
-                                })
-                        except ClientError as e:
-                            if e.response['Error']['Code'] == 'InvalidVpcID.NotFound':
-                                print(f"    Skipping invalid VPC ID: {vpc_id} in region {region}")
-                            else:
-                                print(f"    Error fetching details for VPC {vpc_id} in region {region}: {e}")
+                                # Get the VPC name from tags if available
+                                vpc_name = next(
+                                    (tag['Value'] for tag in vpc.get('Tags', []) if tag['Key'] == 'Name'),
+                                    'N/A'
+                                )
+                                vpcs.append({'VpcId': vpc_id, 'CidrBlock': cidr_block, 'Name': vpc_name})
+                        except Exception as e:
+                            print(f"Error fetching details for VPC {vpc_id} in region {region}: {e}")
 
-                vpcs_by_attachment[attachment_id] = vpcs
-            except Exception as e:
-                print(f"  Error processing Transit Gateway Attachment {attachment_id} in region {region}: {e}")
-                vpcs_by_attachment[attachment_id] = []
+            vpcs_by_region[region] = vpcs
+        except Exception as e:
+            print(f"Error in region {region}: {e}")
+            vpcs_by_region[region] = []
 
-    return vpcs_by_attachment
+    return vpcs_by_region
 
 if __name__ == "__main__":
     # Assume the role
@@ -86,15 +77,18 @@ if __name__ == "__main__":
         print("Failed to assume role. Exiting.")
         exit(1)
 
-    # List VPCs attached to the specified Transit Gateway Attachments across specified regions
-    vpcs_by_attachment = list_vpcs_by_tgw_attachment(credentials, REGIONS, TRANSIT_GATEWAY_ATTACHMENT_IDS)
+    # Use only the specified regions
+    regions = REGIONS
+
+    # List VPCs attached to the specified Transit Gateway Route Table across specified regions
+    vpcs_by_region = list_vpcs_attached_to_tgw_route_table(credentials, regions, TRANSIT_GATEWAY_ROUTE_TABLE_ID)
 
     # Print the results
-    print("\nVPC CIDRs and Transit Gateway Attachment IDs associated with the Transit Gateway Attachments:")
-    for attachment_id, vpcs in vpcs_by_attachment.items():
-        print(f"\nTransit Gateway Attachment: {attachment_id}")
+    print("\nVPCs attached to the Transit Gateway Route Table:")
+    for region, vpcs in vpcs_by_region.items():
         if vpcs:
+            print(f"\nRegion {region}:")
             for vpc in vpcs:
-                print(f"    CIDR: {vpc['CidrBlock']}, VPC ID: {vpc['VpcId']}")
+                print(f"  VPC ID: {vpc['VpcId']}, CIDR: {vpc['CidrBlock']}, Name: {vpc['Name']}")
         else:
-            print(f"    No VPCs associated with this Transit Gateway Attachment.")
+            print(f"\nRegion {region} has no VPCs attached to the Transit Gateway Route Table.")
