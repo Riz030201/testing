@@ -29,7 +29,7 @@ def assume_role(role_arn):
         return None
 
 def list_vpcs_by_tgw_attachment(credentials, regions, tgw_route_table_ids):
-    """List VPCs attached to Transit Gateway Route Tables using their Transit Gateway Attachments."""
+    """List VPC CIDRs and Transit Gateway Attachment IDs associated with Transit Gateway Route Tables."""
     session = boto3.Session(
         aws_access_key_id=credentials['aws_access_key_id'],
         aws_secret_access_key=credentials['aws_secret_access_key'],
@@ -65,15 +65,8 @@ def list_vpcs_by_tgw_attachment(credentials, regions, tgw_route_table_ids):
                                 vpc_details = ec2_client.describe_vpcs(VpcIds=[vpc_id])
                                 for vpc in vpc_details['Vpcs']:
                                     cidr_block = vpc['CidrBlock']
-                                    # Get the VPC name from tags if available
-                                    vpc_name = next(
-                                        (tag['Value'] for tag in vpc.get('Tags', []) if tag['Key'] == 'Name'),
-                                        'N/A'
-                                    )
                                     vpcs.append({
-                                        'VpcId': vpc_id,
                                         'CidrBlock': cidr_block,
-                                        'Name': vpc_name,
                                         'AttachmentId': attachment_id
                                     })
                             except ClientError as e:
@@ -102,13 +95,13 @@ if __name__ == "__main__":
     vpcs_by_tgw = list_vpcs_by_tgw_attachment(credentials, REGIONS, TRANSIT_GATEWAY_ROUTE_TABLE_IDS)
 
     # Print the results
-    print("\nValid VPCs attached to the Transit Gateway Route Tables:")
+    print("\nVPC CIDRs and Transit Gateway Attachment IDs associated with the Transit Gateway Route Tables:")
     for tgw_route_table_id, vpcs_by_region in vpcs_by_tgw.items():
         print(f"\nTransit Gateway Route Table: {tgw_route_table_id}")
         for region, vpcs in vpcs_by_region.items():
             if vpcs:
                 print(f"  Region {region}:")
                 for vpc in vpcs:
-                    print(f"    VPC ID: {vpc['VpcId']}, CIDR: {vpc['CidrBlock']}, Name: {vpc['Name']}, Attachment ID: {vpc['AttachmentId']}")
+                    print(f"    CIDR: {vpc['CidrBlock']}, Attachment ID: {vpc['AttachmentId']}")
             else:
                 print(f"  Region {region} has no VPCs attached to the Transit Gateway Route Table.")
