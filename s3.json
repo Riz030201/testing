@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyAccessUnlessFromVPC",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::calvin-newest-bucket/*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:SourceVpc": "vpc-xxxxxxxxxxxxxx"
+        }
+      }
+    }
+  ]
+}
+
+##### Replace vpc-xxxxxxxxxxxxxx with the VPC ID where the Gateway Endpoint for S3 is attached.
