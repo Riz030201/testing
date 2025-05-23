@@ -70,3 +70,31 @@ Troubleshooting Tips
 
 
 ##### Replace vpc-xxxxxxxxxxxxxx with the VPC ID where the Gateway Endpoint for S3 is attached.
+
+# updated s3 with calvin bucket name, just update the last line for AWS source VPCE
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AccessViaVPCEOnly",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::calvin-enwest-bucket",
+        "arn:aws:s3:::calvin-enwest-bucket/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceVpce": "vpce-0425e9b0dcbd5d1bf"
+        }
+      }
+    }
+  ]
+}
