@@ -1,23 +1,72 @@
+Step 3: Update Route Table
+
+After creating the endpoint, AWS will automatically add a route like:
+
+Destination: pl-xxxxxx (prefix list for S3)
+Target: vpce-xxxxxx
+
+as shown above Verify it’s added to the route tables used by your private subnets.
+
+
+Step 4: Modify S3 Bucket Policy (Optional but Recommended)
+
+Restrict S3 bucket access only via the VPC endpoint:
+
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "DenyAccessUnlessFromVPC",
-      "Effect": "Deny",
+      "Sid": "AllowVPCE",
+      "Effect": "Allow",
       "Principal": "*",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject"
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::my-private-bucket-123",
+        "arn:aws:s3:::my-private-bucket-123/*"
       ],
-      "Resource": "arn:aws:s3:::calvin-newest-bucket/*",
       "Condition": {
-        "StringNotEquals": {
-          "aws:SourceVpc": "vpc-xxxxxxxxxxxxxx"
+        "StringEquals": {
+          "aws:SourceVpce": "vpce-xxxxxxxx"
         }
       }
     }
   ]
 }
+###### Lambda code
+
+import boto3
+
+def lambda_handler(event, context):
+    s3 = boto3.client('s3')
+    response = s3.list_objects_v2(Bucket='my-private-bucket-123')
+    return {
+        'statusCode': 200,
+        'body': response.get('Contents', [])
+    }
+    
+It should succeed even without internet, because traffic goes via VPC endpoint.
+
+⸻
+
+Step 6: Test from Lambda in VPC
+
+Lambda Setup
+	1.	Go to Lambda > Create Function
+	2.	Choose:
+	•	Runtime: Python 3.12 or Node.js, etc.
+	•	Permissions: Attach IAM role with AmazonS3ReadOnlyAccess
+	•	Network: Select VPC, private subnets, and security group
+	3.	Use this code (Python example):
+  	4.	Test the function:
+	•	It should return bucket contents if VPC endpoint and IAM permissions are correctly set.
+
+⸻
+
+Troubleshooting Tips
+	•	403 Access Denied: Likely due to missing VPC endpoint or IAM/bucket policy issues
+	•	Timeouts: Lambda subnet must have route to S3 via endpoint (no need for NAT)
+	•	Policy debug: Use AWS CloudTrail to confirm access is via correct vpce-xxxxxxx
+
+
 
 ##### Replace vpc-xxxxxxxxxxxxxx with the VPC ID where the Gateway Endpoint for S3 is attached.
