@@ -98,3 +98,15 @@ Troubleshooting Tips
     }
   ]
 }
+
+###### Lambda #######
+import boto3
+
+def lambda_handler(event, context):
+    s3 = boto3.client('s3')
+    response = s3.list_objects_v2(Bucket='my-private-bucket-123')
+    return {
+        'statusCode': 200,
+        'body': response.get('Contents', [])
+    }
+
